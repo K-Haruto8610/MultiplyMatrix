@@ -1,6 +1,7 @@
 #####################################################################
 # 16*16の正方行列
 # 参考：https://gitlab.com/iwatepu-sato-lab/idein/slam/py-videocore6/vc6-examples/-/blob/develop/basic_operations/fadd.py
+#      https://gitlab.com/iwatepu-sato-lab/idein/slam/py-videocore6/vc6-examples/-/blob/develop/basicIO/2vec.py
 #####################################################################
 #coding:utf-8
 import numpy as np
