@@ -1,7 +1,6 @@
 #####################################################################
-# 16*16の正方行列
-# 参考：https://gitlab.com/iwatepu-sato-lab/idein/slam/py-videocore6/vc6-examples/-/blob/develop/basic_operations/fadd.py
-#      https://gitlab.com/iwatepu-sato-lab/idein/slam/py-videocore6/vc6-examples/-/blob/develop/basicIO/2vec.py
+# 2つのベクトルを読み書きする
+# 参考：https://github.com/Idein/py-videocore6/blob/master/examples/sgemm.py
 #####################################################################
 #coding:utf-8
 import numpy as np
@@ -19,6 +18,8 @@ def kernel(asm):
 
     g['reg_In_cur']     = g['rf4']
     g['reg_Out_cur']    = g['rf5']
+    g['reg_In_cur2']    = g['rf6']
+    g['reg_In_stride2'] = g['rf7']
 
     # uniformから値を取り出す
     # uniformの読み取り位置はインクリメントされる(pop的動作)
@@ -30,35 +31,42 @@ def kernel(asm):
 
     eidx(r0)        # r0 = [0 ... 15]
     shl(r0, r0, 2)  # 各数値を4倍(float32のバイト数分)
-    # 'shl' : lambda a,b: a << (b % 32), 今回はr0を左に2個分ずらす
-    # r0=0,1,10,11,100,...,1111（0~15を二進数で表した場合）
-    # -> r0=0,100,1000,1100,...,111100(0,4,8,12...,60)
     add(reg_In_cur,  reg_In_base,  r0) # Baseアドレスから ストライド=4バイトのアドレスベクトルを生成
     add(reg_Out_cur, reg_Out_base, r0) # Baseアドレスから ストライド=4バイトのアドレスベクトルを生成
-    add(r3, r3, r0)
-    mov(r1, 0) # 合計値キャッシュの初期化
+    add(reg_In_cur2,  reg_In_base,  r0) # Baseアドレスから ストライド=4バイトのアドレスベクトルを生成
+    # 合計値キャッシュの初期化
+    mov(r1, 3)
+    
+    # reg_In_stride2 をどうしよう
 
-    # データの読み込み
-    # 配列Bの1列目を読み込む
-    mov(tmua, r3, sig = thrsw)
-    nop()
-    nop()
-    nop(sig = ldtmu(r2))
+    ### 計算処理を書くならここに書く ###
     for i in range(16):
-      # データの読み込み
-      # 配列Aを読み込む
-      mov(tmua, reg_In_cur, sig = thrsw)
-      nop()
-      nop()
-      nop(sig = ldtmu(r0))
+        for j in range(16):
+            # データの読み込み
+            # 配列Bの1列目を読み込む
+            mov(tmua, reg_In_cur2, sig = thrsw)
+            nop()
+            nop()
+            nop(sig = ldtmu(r2))
+            
+            # データの読み込み
+            # 配列Aを読み込む
+            mov(tmua, reg_In_cur, sig = thrsw)
+            nop()
+            nop()
+            nop(sig = ldtmu(r0))
 
-      ### 計算処理を書くならここに書く ###
-      fmul(r1, r2, r0)
-      mov(tmud, r1)           # 書き出すデータ
-      mov(tmua, reg_Out_cur)  # 書き出し先アドレスベクトル
-      # addressのインクリメント
-      add(reg_In_cur,  reg_In_cur,  reg_In_stride)
-      add(reg_Out_cur, reg_Out_cur, reg_Out_stride)
+            mov(r3, 0)
+
+            for k in range(16):
+                fmul(r1, r2, r0)
+                fadd(r3, r3, r1)
+            mov(tmud, r3)           # 書き出すデータ
+            mov(tmua, reg_Out_cur)  # 書き出し先アドレスベクトル
+            # addressのインクリメント
+            add(reg_In_cur,  reg_In_cur,  reg_In_stride)
+            add(reg_In_cur2, reg_In_cur2, reg_In_stride2)
+            add(reg_Out_cur, reg_Out_cur, reg_Out_stride)
     
     
     # GPUコードを終了する
@@ -119,10 +127,8 @@ def main():
         inp[14][:] = O_ref
         inp[15][:] = P_ref
 
-        T_ref = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
-        for i in range(16):
-            inp_T[i][:] = T_ref
-        
+        #inp_T[:][:] = inp.transpose()
+        inp_T=inp
         out[0][:] = 0
         out[1][:] = 0
         out[2][:] = 0
@@ -151,15 +157,9 @@ def main():
         # Run the program
         code = drv.program(kernel)
         drv.execute(code, unif.addresses()[0], thread=1)
-        for i in range(16):
-            for j in range(16):
-                for k in range(16):
-                    #drv.execute(code, unif.addresses()[0], thread=1)
-                    Ans[j][i] = Ans[j][i] + out[j][k]
-
-        print(Ans)
+        print(out)
         print('')
-        err = np.dot(inp, inp) - Ans
-        print(err)       
+        err = np.dot(inp, inp) - out
+        #print(err)     
 if __name__ == '__main__':
     main()
